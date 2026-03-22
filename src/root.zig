@@ -4,13 +4,14 @@ const Type = std.builtin.Type;
 
 pub const EntityId = packed struct { generation: u8, index: u24 };
 
-pub fn Ecs(Entity: type) type {
-    const entity_struct = switch (@typeInfo(Entity)) {
+pub fn Ecs(E: type) type {
+    const entity_struct = switch (@typeInfo(E)) {
         .@"struct" => |s| s,
         else => @compileError("Entity must be a struct"),
     };
 
     return struct {
+        pub const Entity = E;
         const Self = @This();
 
         allocator: std.mem.Allocator,
@@ -111,6 +112,7 @@ fn QueryIterator(Query: type, comptime entity_fields: []const Type.StructField) 
         pub fn init(ecs: anytype) !Self {
             var entities = try std.DynamicBitSet.initEmpty(ecs.allocator, ecs.generations.items.len);
             for (0..ecs.generations.items.len) |i| {
+                // If the entity is dead, skip it.
                 if (std.mem.containsAtLeastScalar(u24, ecs.entity_pool.items, 1, @intCast(i))) continue;
 
                 var contains = true;

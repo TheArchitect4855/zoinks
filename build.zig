@@ -9,6 +9,17 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    const bench_module = b.createModule(.{
+        .root_source_file = b.path("src/benchmark.zig"),
+        .optimize = optimize,
+        .target = target,
+    });
+
+    const bench_exe = b.addExecutable(.{ .name = "benchmark", .root_module = bench_module });
+    const run_bench = b.addRunArtifact(bench_exe);
+    const bench_step = b.step("bench", "Run benchmark");
+    bench_step.dependOn(&run_bench.step);
+
     const test_module = b.createModule(.{
         .root_source_file = b.path("src/tests.zig"),
         .optimize = optimize,

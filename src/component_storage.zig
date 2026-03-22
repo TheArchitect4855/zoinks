@@ -32,19 +32,28 @@ fn PackedComponentStorage(T: type) type {
             try self.values.appendNTimes(gpa, undefined, n);
             self.values.items[index] = value;
         }
+
+        pub fn intersectWith(self: *Self, gpa: std.mem.Allocator, entities: *std.DynamicBitSetUnmanaged) !void {
+            _ = self;
+            _ = gpa;
+            _ = entities;
+        }
     };
 }
 
 fn SparseComponentStorage(T: type) type {
     const page_size = 1024;
-    const Page = [page_size]?T;
+    const Page = [page_size]T;
 
     return struct {
         const Self = @This();
 
+        entities: std.DynamicBitSetUnmanaged = .{},
         pages: std.ArrayListUnmanaged(?*Page) = .empty,
 
         pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
+            self.entities.deinit(gpa);
+
             for (self.pages.items) |i| {
                 if (i) |page| gpa.destroy(page);
             }
@@ -53,13 +62,8 @@ fn SparseComponentStorage(T: type) type {
         }
 
         pub fn get(self: *Self, index: usize) ?*T {
-            const page_index = index / page_size;
-            if (page_index >= self.pages.items.len) return null;
-
-            const page = self.pages.items[page_index] orelse return null;
-            const value = &page[index % page_size];
-            if (value.* == null) return null;
-            return &value.*.?;
+            if (index >= self.entities.capacity() or !self.entities.isSet(index)) return null;
+            return &self.pages.items[index / page_size].?[index % page_size];
         }
 
         pub fn set(self: *Self, gpa: std.mem.Allocator, index: usize, value: ?T) !void {
@@ -75,15 +79,24 @@ fn SparseComponentStorage(T: type) type {
                     page = p;
                 } else {
                     page = try gpa.create(Page);
-                    page.* = [_]?T{null} ** page_size;
                     self.pages.items[page_index] = page;
                 }
 
                 page.*[index % page_size] = v;
-            } else {
-                if (page_index >= self.pages.items.len) return;
-                if (self.pages.items[page_index]) |page| page[index % page_size] = null;
+
+                if (index >= self.entities.capacity()) try self.entities.resize(gpa, index + 1, false);
+                self.entities.set(index);
+            } else if (index < self.entities.capacity()) {
+                self.entities.unset(index);
             }
+        }
+
+        pub fn intersectWith(self: *Self, gpa: std.mem.Allocator, entities: *std.DynamicBitSetUnmanaged) !void {
+            if (self.entities.capacity() < entities.capacity()) {
+                try self.entities.resize(gpa, entities.capacity(), false);
+            }
+
+            entities.setIntersection(self.entities);
         }
     };
 }

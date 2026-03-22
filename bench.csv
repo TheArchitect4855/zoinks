@@ -1,0 +1,15 @@
+function	invocation count	elapsed time	avg. per invocation
+benchSpawn	1000000	94ms	94ns
+benchQueryEmpty	100	5ms	53µs
+benchQueryName	100	7ms	77µs
+benchCounter	100	865ms	8ms
+benchSum	100	1s	13ms
+benchFlag	100	1s	18ms
+benchDespawn	1000000	17ms	17ns
+benchSpawn	1000000	34ms	34ns
+benchDespawnRandom	500000	10ms	20ns
+benchQueryEmpty	100	5ms	54µs
+benchQueryName	100	7ms	70µs
+benchCounter	100	611ms	6ms
+benchSum	100	882ms	8ms
+benchFlag	100	1s	12ms

@@ -16,7 +16,9 @@ pub fn build(b: *std.Build) void {
     });
 
     const bench_exe = b.addExecutable(.{ .name = "benchmark", .root_module = bench_module });
+    const bench_install = b.addInstallArtifact(bench_exe, .{});
     const run_bench = b.addRunArtifact(bench_exe);
+    run_bench.step.dependOn(&bench_install.step);
     const bench_step = b.step("bench", "Run benchmark");
     bench_step.dependOn(&run_bench.step);
 

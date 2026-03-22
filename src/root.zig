@@ -17,6 +17,7 @@ pub fn Ecs(E: type) type {
         allocator: std.mem.Allocator,
         components: Components(entity_struct.fields),
         entity_pool: std.ArrayListUnmanaged(u24) = .empty,
+        entity_set: std.DynamicBitSetUnmanaged = .{},
         generations: std.ArrayListUnmanaged(u8) = .empty,
 
         pub fn init(gpa: std.mem.Allocator) Self {
@@ -34,11 +35,13 @@ pub fn Ecs(E: type) type {
             }
 
             self.entity_pool.deinit(self.allocator);
+            self.entity_set.deinit(self.allocator);
             self.generations.deinit(self.allocator);
         }
 
         pub fn spawn(self: *Self, entity: Entity) !EntityId {
             const id = try self.allocEntity();
+            self.entity_set.set(id.index);
             inline for (entity_struct.fields) |field| {
                 const value = @field(entity, field.name);
                 try @field(self.components, field.name).set(self.allocator, id.index, value);
@@ -48,8 +51,9 @@ pub fn Ecs(E: type) type {
         }
 
         pub fn despawn(self: *Self, entity: EntityId) !void {
-            if (entity.index >= self.generations.items.len) return;
+            if (entity.index >= self.generations.items.len or entity.generation != self.generations.items[entity.index]) return;
             try self.entity_pool.append(self.allocator, entity.index);
+            self.entity_set.unset(entity.index);
             self.generations.items[entity.index] += 1;
         }
 
@@ -63,6 +67,12 @@ pub fn Ecs(E: type) type {
                     .generation = self.generations.items[index],
                     .index = index,
                 };
+            }
+
+            if (self.generations.items.len >= self.entity_set.capacity()) {
+                const prev = self.entity_set.capacity();
+                const len = @max(@sizeOf(usize) * 8, prev * 2);
+                try self.entity_set.resize(self.allocator, len, false);
             }
 
             const index = self.generations.items.len;
@@ -110,24 +120,20 @@ fn QueryIterator(Query: type, comptime entity_fields: []const Type.StructField) 
         iter: std.DynamicBitSet.Iterator(.{}),
 
         pub fn init(ecs: anytype) !Self {
-            var entities = try std.DynamicBitSet.initEmpty(ecs.allocator, ecs.generations.items.len);
-            for (0..ecs.generations.items.len) |i| {
-                // If the entity is dead, skip it.
-                if (std.mem.containsAtLeastScalar(u24, ecs.entity_pool.items, 1, @intCast(i))) continue;
-
-                var contains = true;
-                inline for (query_fields) |q| {
-                    const e = getField(q.name, entity_fields);
-                    if (isOptional(e.type) and !isOptional(q.type)) {
-                        const value = @field(ecs.components, q.name).get(i);
-                        if (value == null) contains = false;
-                    }
+            var entities: std.DynamicBitSetUnmanaged = try ecs.entity_set.clone(ecs.allocator);
+            inline for (query_fields) |q| {
+                const e = getField(q.name, entity_fields);
+                if (isOptional(e.type) and !isOptional(q.type)) {
+                    try @field(ecs.components, q.name).intersectWith(ecs.allocator, &entities);
                 }
-
-                if (contains) entities.set(i);
             }
 
-            return .{ .components = &ecs.components, .entities = entities, .generations = ecs.generations.items, .iter = entities.iterator(.{}) };
+            return .{
+                .components = &ecs.components,
+                .entities = .{ .allocator = ecs.allocator, .unmanaged = entities },
+                .generations = ecs.generations.items,
+                .iter = entities.iterator(.{}),
+            };
         }
 
         pub fn deinit(self: *Self) void {

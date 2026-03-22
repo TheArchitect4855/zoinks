@@ -14,13 +14,14 @@ pub const Ecs = @import("root.zig").Ecs(struct {
     ptr_opt: *?u32 = &opt_ptr_dest,
     slice: []const u8 = "Hello, world!",
     opt_slice: ?[]const u8 = null,
+    flag: bool = false,
 });
 
 // Test functions that don't assert anything other than
 // gpa.deinit() == .ok are basically just checking that
 // the operations don't crash or cause memory leaks.
 
-test "ECS init/deinit" {
+test "init/deinit" {
     var gpa = Allocator.init;
     defer assert(gpa.deinit() == .ok);
 
@@ -28,14 +29,14 @@ test "ECS init/deinit" {
     defer ecs.deinit();
 }
 
-test "ECS spawn" {
+test "spawn" {
     var ecs = getEcs();
     defer ecs.deinit();
 
     _ = try ecs.spawn(.{});
 }
 
-test "ECS despawn" {
+test "despawn" {
     var ecs = getEcs();
     defer ecs.deinit();
 
@@ -43,7 +44,7 @@ test "ECS despawn" {
     try ecs.despawn(id);
 }
 
-test "ECS query empty" {
+test "query empty" {
     var ecs = getEcs();
     defer ecs.deinit();
 
@@ -53,7 +54,7 @@ test "ECS query empty" {
     assert(query.next() == null);
 }
 
-test "ECS query next end" {
+test "query next end" {
     var ecs = getEcsForQuery(1);
     defer ecs.deinit();
 
@@ -64,7 +65,7 @@ test "ECS query next end" {
     assert(query.next() == null);
 }
 
-test "ECS query current entity ID" {
+test "query current entity ID" {
     var ecs = getEcs();
     defer ecs.deinit();
 
@@ -77,7 +78,7 @@ test "ECS query current entity ID" {
     assert(std.meta.eql(query.current_entity_id, id));
 }
 
-test "ECS query num" {
+test "query num" {
     var ecs = getEcsForQuery(1);
     defer ecs.deinit();
 
@@ -87,7 +88,7 @@ test "ECS query num" {
     assert(std.meta.eql(query.next(), .{ .num = 0 }));
 }
 
-test "ECS query num optional" {
+test "query num optional" {
     var ecs = getEcsForQuery(1);
     defer ecs.deinit();
 
@@ -97,7 +98,7 @@ test "ECS query num optional" {
     assert(std.meta.eql(query.next(), .{ .num = 0 }));
 }
 
-test "ECS query num pointer" {
+test "query num pointer" {
     var ecs = getEcsForQuery(1);
     defer ecs.deinit();
 
@@ -107,7 +108,7 @@ test "ECS query num pointer" {
     assert(query.next().?.num.* == 0);
 }
 
-test "ECS query num optional pointer" {
+test "query num optional pointer" {
     var ecs = getEcsForQuery(1);
     defer ecs.deinit();
 
@@ -117,7 +118,17 @@ test "ECS query num optional pointer" {
     assert(query.next().?.num.?.* == 0);
 }
 
-test "ECS query opt_num" {
+test "query num with value" {
+    var ecs = getEcsForQuery(2);
+    defer ecs.deinit();
+
+    var query = try ecs.query(struct { num: u32 = 1 });
+    defer query.deinit();
+
+    assert(std.meta.eql(query.next(), .{ .num = 1 }));
+}
+
+test "query opt_num" {
     var ecs = getEcsForQuery(2);
     defer ecs.deinit();
 
@@ -127,7 +138,7 @@ test "ECS query opt_num" {
     assert(std.meta.eql(query.next(), .{ .opt_num = 1 }));
 }
 
-test "ECS query opt_num optional" {
+test "query opt_num optional" {
     var ecs = getEcsForQuery(2);
     defer ecs.deinit();
 
@@ -138,7 +149,7 @@ test "ECS query opt_num optional" {
     assert(std.meta.eql(query.next(), .{ .opt_num = 1 }));
 }
 
-test "ECS query opt_num pointer" {
+test "query opt_num pointer" {
     var ecs = getEcsForQuery(2);
     defer ecs.deinit();
 
@@ -148,7 +159,7 @@ test "ECS query opt_num pointer" {
     assert(query.next().?.opt_num.* == 1);
 }
 
-test "ECS query opt_num optional pointer" {
+test "query opt_num optional pointer" {
     var ecs = getEcsForQuery(2);
     defer ecs.deinit();
 
@@ -159,7 +170,28 @@ test "ECS query opt_num optional pointer" {
     assert(query.next().?.opt_num.?.* == 1);
 }
 
-test "ECS query ptr" {
+test "query opt_num with value" {
+    var ecs = getEcsForQuery(2);
+    defer ecs.deinit();
+
+    var query = try ecs.query(struct { opt_num: u32 = 1 });
+    defer query.deinit();
+
+    assert(std.meta.eql(query.next(), .{ .opt_num = 1 }));
+}
+
+test "query opt_num with null value" {
+    var ecs = getEcsForQuery(3);
+    defer ecs.deinit();
+
+    var query = try ecs.query(struct { num: u32, opt_num: ?u32 = null });
+    defer query.deinit();
+
+    _ = query.next();
+    assert(std.meta.eql(query.next(), .{ .num = 2, .opt_num = null }));
+}
+
+test "query ptr" {
     var ecs = getEcsForQuery(1);
     defer ecs.deinit();
 
@@ -169,7 +201,7 @@ test "ECS query ptr" {
     assert(std.meta.eql(query.next(), .{ .ptr = &ptr_dest }));
 }
 
-test "ECS query ptr optional" {
+test "query ptr optional" {
     var ecs = getEcsForQuery(1);
     defer ecs.deinit();
 
@@ -179,7 +211,7 @@ test "ECS query ptr optional" {
     assert(std.meta.eql(query.next(), .{ .ptr = &ptr_dest }));
 }
 
-test "ECS query ptr pointer" {
+test "query ptr pointer" {
     var ecs = getEcsForQuery(1);
     defer ecs.deinit();
 
@@ -189,7 +221,7 @@ test "ECS query ptr pointer" {
     assert(query.next().?.ptr.* == &ptr_dest);
 }
 
-test "ECS query ptr optional pointer" {
+test "query ptr optional pointer" {
     var ecs = getEcsForQuery(1);
     defer ecs.deinit();
 
@@ -197,6 +229,16 @@ test "ECS query ptr optional pointer" {
     defer query.deinit();
 
     assert(query.next().?.ptr.?.* == &ptr_dest);
+}
+
+test "query flag" {
+    var ecs = getEcsForQuery(2);
+    defer ecs.deinit();
+
+    var query = try ecs.query(struct { num: u32, flag: bool = false });
+    defer query.deinit();
+
+    assert(std.meta.eql(query.next(), .{ .num = 1, .flag = false }));
 }
 
 fn getEcs() Ecs {
@@ -211,6 +253,7 @@ fn getEcsForQuery(entity_count: comptime_int) Ecs {
             .opt_num = if (i % 2 == 0) null else @intCast(i),
             .opt_ptr = if (i % 3 == 0) null else &ptr_dest,
             .opt_slice = if (i % 5 == 0) null else "Hello, world!",
+            .flag = (i % 6 == 0),
         }) catch unreachable;
     }
 

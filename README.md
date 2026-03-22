@@ -62,6 +62,7 @@ const Ecs = @import("zoinks").Ecs(struct {
     // ...your entity definition here...
     foo: u32 = 42,
     bar: ?u32 = null, // Optional values are handled automatically.
+    baz: bool = false,
 });
 
 // --- INIT/DEINIT --- \\
@@ -85,6 +86,7 @@ var query = try ecs.query(struct {
     // pointer.
     foo: *u32, // This would query a pointer to the foo field on your entity.
     bar: u32,  // This would copy the bar field on your entity, and only return entities where bar is not null.
+    baz: bool = true, // You can even query for specific values!
 });
 defer query.deinit();
 

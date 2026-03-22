@@ -43,20 +43,24 @@ pub fn main() !void {
     // --- BENCHMARKS --- \\
     try bench("benchSpawn", .{ .ecs = &ecs, .entities = pregenerated_entities }, spawn_iter_count);
     try bench("benchQueryEmpty", .{ .ecs = &ecs }, query_iter_count);
+    try bench("benchQueryFlag", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchQueryName", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchCounter", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchSum", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchFlag", .{ .ecs = &ecs }, query_iter_count);
+    try bench("benchSearchFlag", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchSearchRandomValue", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchDespawn", .{ .ecs = &ecs }, spawn_iter_count);
 
     try bench("benchSpawn", .{ .ecs = &ecs, .entities = pregenerated_entities }, spawn_iter_count);
     try bench("benchDespawnRandom", .{ .ecs = &ecs, .indices = despawn_indices }, despawn_indices.len);
     try bench("benchQueryEmpty", .{ .ecs = &ecs }, query_iter_count);
+    try bench("benchQueryFlag", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchQueryName", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchCounter", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchSum", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchFlag", .{ .ecs = &ecs }, query_iter_count);
+    try bench("benchSearchFlag", .{ .ecs = &ecs }, query_iter_count);
     try bench("benchSearchRandomValue", .{ .ecs = &ecs }, query_iter_count);
 
     try stdout.flush();
@@ -158,9 +162,27 @@ inline fn benchQueryEmpty(args: anytype, id: usize) !usize {
     return id;
 }
 
+inline fn benchQueryFlag(args: anytype, id: usize) !usize {
+    try benchQuery(args.ecs, struct { flag: bool = true });
+    return id;
+}
+
 inline fn benchQueryName(args: anytype, id: usize) !usize {
     try benchQuery(args.ecs, struct { name: []const u8 });
     return id;
+}
+
+inline fn benchSearchFlag(args: anytype, _: usize) !usize {
+    const ecs: *Ecs = args.ecs;
+    var query = try ecs.query(struct { flag: bool = true });
+    defer query.deinit();
+
+    var count: usize = 0;
+    while (query.next()) |_| {
+        count += 1;
+    }
+
+    return @intCast(count);
 }
 
 inline fn benchSearchRandomValue(args: anytype, _: usize) !usize {

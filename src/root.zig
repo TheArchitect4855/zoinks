@@ -141,17 +141,27 @@ fn QueryIterator(Query: type, comptime entity_fields: []const Type.StructField) 
         }
 
         pub fn next(self: *Self) ?Query {
-            const index = self.iter.next() orelse return null;
-            self.current_entity_id = .{ .generation = self.generations[index], .index = @intCast(index) };
+            outer: while (self.iter.next()) |index| {
+                self.current_entity_id = .{ .generation = self.generations[index], .index = @intCast(index) };
 
-            var result: Query = undefined;
-            inline for (query_fields) |target| {
-                const component = @field(self.components, target.name).get(index);
-                const Source = unwrapNullablePointer(@TypeOf(component));
-                @field(result, target.name) = convertComponentToQueryType(target.type, Source, component);
+                var result: Query = undefined;
+                inline for (query_fields) |target| {
+                    const component = @field(self.components, target.name).get(index);
+                    const Source = unwrapNullablePointer(@TypeOf(component));
+                    const value: target.type = convertComponentToQueryType(target.type, Source, component);
+
+                    // Filter on query values
+                    if (target.defaultValue()) |default_value| {
+                        if (default_value != value) continue :outer;
+                    }
+
+                    @field(result, target.name) = value;
+                }
+
+                return result;
             }
 
-            return result;
+            return null;
         }
     };
 }

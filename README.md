@@ -49,7 +49,7 @@ const zoinks = b.dependency("zoinks", .{
     .optimize = optimize,
 });
 
-exe_mod.addImport("zoinks", linalg.module("zoinks"));
+exe_mod.addImport("zoinks", zoinks.module("zoinks"));
 ```
 
 ## Usage

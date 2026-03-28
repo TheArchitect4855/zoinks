@@ -5,32 +5,32 @@ const Type = std.builtin.Type;
 pub const EntityId = packed struct { generation: u8, index: u24 };
 
 pub fn Ecs(E: type) type {
-    const entity_struct = switch (@typeInfo(E)) {
+    const entity_fields = switch (@typeInfo(E)) {
         .@"struct" => |s| s,
         else => @compileError("Entity must be a struct"),
-    };
+    }.fields;
 
     return struct {
         pub const Entity = E;
-        const Self = @This();
+        const ThisEcs = @This();
 
         allocator: std.mem.Allocator,
-        components: Components(entity_struct.fields),
+        components: Components(entity_fields),
         entity_pool: std.ArrayListUnmanaged(u24) = .empty,
         entity_set: std.DynamicBitSetUnmanaged = .{},
         generations: std.ArrayListUnmanaged(u8) = .empty,
 
-        pub fn init(gpa: std.mem.Allocator) Self {
-            var components: Components(entity_struct.fields) = undefined;
-            inline for (entity_struct.fields) |field| {
+        pub fn init(gpa: std.mem.Allocator) ThisEcs {
+            var components: Components(entity_fields) = undefined;
+            inline for (entity_fields) |field| {
                 @field(components, field.name) = .{};
             }
 
             return .{ .allocator = gpa, .components = components };
         }
 
-        pub fn deinit(self: *Self) void {
-            inline for (entity_struct.fields) |field| {
+        pub fn deinit(self: *ThisEcs) void {
+            inline for (entity_fields) |field| {
                 @field(self.components, field.name).deinit(self.allocator);
             }
 
@@ -39,10 +39,10 @@ pub fn Ecs(E: type) type {
             self.generations.deinit(self.allocator);
         }
 
-        pub fn spawn(self: *Self, entity: Entity) !EntityId {
+        pub fn spawn(self: *ThisEcs, entity: Entity) !EntityId {
             const id = try self.allocEntity();
             self.entity_set.set(id.index);
-            inline for (entity_struct.fields) |field| {
+            inline for (entity_fields) |field| {
                 const value = @field(entity, field.name);
                 try @field(self.components, field.name).set(self.allocator, id.index, value);
             }
@@ -50,18 +50,18 @@ pub fn Ecs(E: type) type {
             return id;
         }
 
-        pub fn despawn(self: *Self, entity: EntityId) !void {
+        pub fn despawn(self: *ThisEcs, entity: EntityId) !void {
             if (entity.index >= self.generations.items.len or entity.generation != self.generations.items[entity.index]) return;
             try self.entity_pool.append(self.allocator, entity.index);
             self.entity_set.unset(entity.index);
             self.generations.items[entity.index] += 1;
         }
 
-        pub fn query(self: *Self, Query: type) !QueryIterator(Query, entity_struct.fields) {
-            return try QueryIterator(Query, entity_struct.fields).init(self);
+        pub fn query(self: *ThisEcs, Query: type) !QueryIterator(Query) {
+            return try QueryIterator(Query).init(self);
         }
 
-        fn allocEntity(self: *Self) !EntityId {
+        fn allocEntity(self: *ThisEcs) !EntityId {
             if (self.entity_pool.pop()) |index| {
                 return .{
                     .generation = self.generations.items[index],
@@ -79,10 +79,72 @@ pub fn Ecs(E: type) type {
             try self.generations.append(self.allocator, 0);
             return .{ .generation = 0, .index = @intCast(index) };
         }
+
+        pub fn QueryIterator(Query: type) type {
+            const query_fields = switch (@typeInfo(Query)) {
+                .@"struct" => |s| s.fields,
+                else => @compileError("Query must be a struct"),
+            };
+
+            return struct {
+                const ThisQueryIterator = @This();
+
+                current_entity_id: EntityId = undefined,
+                components: *Components(entity_fields),
+                entities: std.DynamicBitSet,
+                generations: []const u8,
+                iter: std.DynamicBitSet.Iterator(.{}),
+
+                pub fn init(ecs: *ThisEcs) !ThisQueryIterator {
+                    var entities: std.DynamicBitSetUnmanaged = try ecs.entity_set.clone(ecs.allocator);
+                    inline for (query_fields) |q| {
+                        const e = getField(q.name, entity_fields);
+                        if (isOptional(e.type) and !isOptional(q.type)) {
+                            try @field(ecs.components, q.name).intersectWith(ecs.allocator, &entities);
+                        }
+                    }
+
+                    return .{
+                        .components = &ecs.components,
+                        .entities = .{ .allocator = ecs.allocator, .unmanaged = entities },
+                        .generations = ecs.generations.items,
+                        .iter = entities.iterator(.{}),
+                    };
+                }
+
+                pub fn deinit(self: *ThisQueryIterator) void {
+                    self.entities.deinit();
+                }
+
+                pub fn next(self: *ThisQueryIterator) ?Query {
+                    outer: while (self.iter.next()) |index| {
+                        self.current_entity_id = .{ .generation = self.generations[index], .index = @intCast(index) };
+
+                        var result: Query = undefined;
+                        inline for (query_fields) |target| {
+                            const component = @field(self.components, target.name).get(index);
+                            const Source = unwrapNullablePointer(@TypeOf(component));
+                            const value: target.type = convertComponentToQueryType(target.type, Source, component);
+
+                            // Filter on query values
+                            if (target.defaultValue()) |default_value| {
+                                if (default_value != value) continue :outer;
+                            }
+
+                            @field(result, target.name) = value;
+                        }
+
+                        return result;
+                    }
+
+                    return null;
+                }
+            };
+        }
     };
 }
 
-fn Components(comptime entity_fields: []const Type.StructField) type {
+fn Components(entity_fields: []const Type.StructField) type {
     var component_fields: [entity_fields.len]Type.StructField = undefined;
     inline for (entity_fields, 0..) |field, i| {
         const Storage = component_storage.ComponentStorage(field.type);
@@ -102,68 +164,6 @@ fn Components(comptime entity_fields: []const Type.StructField) type {
         .decls = &.{},
         .is_tuple = false,
     } });
-}
-
-fn QueryIterator(Query: type, comptime entity_fields: []const Type.StructField) type {
-    const query_fields = switch (@typeInfo(Query)) {
-        .@"struct" => |s| s.fields,
-        else => @compileError("Query must be a struct"),
-    };
-
-    return struct {
-        const Self = @This();
-
-        current_entity_id: EntityId = undefined,
-        components: *Components(entity_fields),
-        entities: std.DynamicBitSet,
-        generations: []const u8,
-        iter: std.DynamicBitSet.Iterator(.{}),
-
-        pub fn init(ecs: anytype) !Self {
-            var entities: std.DynamicBitSetUnmanaged = try ecs.entity_set.clone(ecs.allocator);
-            inline for (query_fields) |q| {
-                const e = getField(q.name, entity_fields);
-                if (isOptional(e.type) and !isOptional(q.type)) {
-                    try @field(ecs.components, q.name).intersectWith(ecs.allocator, &entities);
-                }
-            }
-
-            return .{
-                .components = &ecs.components,
-                .entities = .{ .allocator = ecs.allocator, .unmanaged = entities },
-                .generations = ecs.generations.items,
-                .iter = entities.iterator(.{}),
-            };
-        }
-
-        pub fn deinit(self: *Self) void {
-            self.entities.deinit();
-        }
-
-        pub fn next(self: *Self) ?Query {
-            outer: while (self.iter.next()) |index| {
-                self.current_entity_id = .{ .generation = self.generations[index], .index = @intCast(index) };
-
-                var result: Query = undefined;
-                inline for (query_fields) |target| {
-                    const component = @field(self.components, target.name).get(index);
-                    const Source = unwrapNullablePointer(@TypeOf(component));
-                    const value: target.type = convertComponentToQueryType(target.type, Source, component);
-
-                    // Filter on query values
-                    if (target.defaultValue()) |default_value| {
-                        if (default_value != value) continue :outer;
-                    }
-
-                    @field(result, target.name) = value;
-                }
-
-                return result;
-            }
-
-            return null;
-        }
-    };
 }
 
 fn convertComponentToQueryType(Target: type, Source: type, value: ?*Source) Target {

@@ -1,21 +1,11 @@
 const std = @import("std");
+const Entity = @import("entity.zig");
 const assert = std.debug.assert;
 const Allocator = std.heap.DebugAllocator(.{});
 
 var allocator = Allocator.init;
-var ptr_dest: u32 = 0;
-var opt_ptr_dest: ?u32 = null;
 
-pub const Ecs = @import("root.zig").Ecs(struct {
-    num: u32 = 0,
-    opt_num: ?u32 = null,
-    ptr: *u32 = &ptr_dest,
-    opt_ptr: ?*u32 = null,
-    ptr_opt: *?u32 = &opt_ptr_dest,
-    slice: []const u8 = "Hello, world!",
-    opt_slice: ?[]const u8 = null,
-    flag: bool = false,
-});
+pub const Ecs = @import("zoinks").Ecs(Entity);
 
 // Test functions that don't assert anything other than
 // gpa.deinit() == .ok are basically just checking that
@@ -198,7 +188,7 @@ test "query ptr" {
     var query = try ecs.query(struct { ptr: *u32 });
     defer query.deinit();
 
-    assert(std.meta.eql(query.next(), .{ .ptr = &ptr_dest }));
+    assert(std.meta.eql(query.next(), .{ .ptr = &Entity.ptr_dest }));
 }
 
 test "query ptr optional" {
@@ -208,7 +198,7 @@ test "query ptr optional" {
     var query = try ecs.query(struct { ptr: ?*u32 });
     defer query.deinit();
 
-    assert(std.meta.eql(query.next(), .{ .ptr = &ptr_dest }));
+    assert(std.meta.eql(query.next(), .{ .ptr = &Entity.ptr_dest }));
 }
 
 test "query ptr pointer" {
@@ -218,7 +208,7 @@ test "query ptr pointer" {
     var query = try ecs.query(struct { ptr: **u32 });
     defer query.deinit();
 
-    assert(query.next().?.ptr.* == &ptr_dest);
+    assert(query.next().?.ptr.* == &Entity.ptr_dest);
 }
 
 test "query ptr optional pointer" {
@@ -228,7 +218,7 @@ test "query ptr optional pointer" {
     var query = try ecs.query(struct { ptr: ?**u32 });
     defer query.deinit();
 
-    assert(query.next().?.ptr.?.* == &ptr_dest);
+    assert(query.next().?.ptr.?.* == &Entity.ptr_dest);
 }
 
 test "query flag" {
@@ -251,7 +241,7 @@ fn getEcsForQuery(entity_count: comptime_int) Ecs {
         _ = ecs.spawn(.{
             .num = @intCast(i),
             .opt_num = if (i % 2 == 0) null else @intCast(i),
-            .opt_ptr = if (i % 3 == 0) null else &ptr_dest,
+            .opt_ptr = if (i % 3 == 0) null else &Entity.ptr_dest,
             .opt_slice = if (i % 5 == 0) null else "Hello, world!",
             .flag = (i % 6 == 0),
         }) catch unreachable;

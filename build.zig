@@ -26,9 +26,12 @@ pub fn build(b: *std.Build) void {
     bench_step.dependOn(&run_bench.step);
 
     const test_module = b.createModule(.{
-        .root_source_file = b.path("src/tests.zig"),
+        .root_source_file = b.path("src/tests/root.zig"),
         .optimize = optimize,
         .target = target,
+        .imports = &.{
+            .{ .name = "zoinks", .module = zoinks },
+        },
     });
 
     const test_exe = b.addTest(.{ .root_module = test_module });

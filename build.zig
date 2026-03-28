@@ -3,16 +3,19 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    _ = b.addModule("zoinks", .{
+    const zoinks = b.addModule("zoinks", .{
         .root_source_file = b.path("src/root.zig"),
         .optimize = optimize,
         .target = target,
     });
 
     const bench_module = b.createModule(.{
-        .root_source_file = b.path("src/benchmark.zig"),
+        .root_source_file = b.path("benchmark/main.zig"),
         .optimize = optimize,
         .target = target,
+        .imports = &.{
+            .{ .name = "zoinks", .module = zoinks },
+        },
     });
 
     const bench_exe = b.addExecutable(.{ .name = "benchmark", .root_module = bench_module });

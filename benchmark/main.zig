@@ -1,5 +1,5 @@
 const std = @import("std");
-const zoinks = @import("root.zig");
+const zoinks = @import("zoinks");
 const names: []const []const u8 = @import("benchmark_names.zon");
 
 const Ecs = zoinks.Ecs(struct {

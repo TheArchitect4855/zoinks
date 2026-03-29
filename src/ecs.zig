@@ -12,6 +12,13 @@ pub fn Ecs(E: type) type {
 
     return struct {
         pub const Entity = E;
+
+        // Error types
+        pub const DespawnError = std.mem.Allocator.Error;
+        pub const SpawnError = std.mem.Allocator.Error;
+        pub const QueryError = std.mem.Allocator.Error;
+        pub const Error = DespawnError | SpawnError | QueryError;
+
         const ThisEcs = @This();
 
         allocator: std.mem.Allocator,
@@ -39,7 +46,7 @@ pub fn Ecs(E: type) type {
             self.generations.deinit(self.allocator);
         }
 
-        pub fn spawn(self: *ThisEcs, entity: Entity) !EntityId {
+        pub fn spawn(self: *ThisEcs, entity: Entity) SpawnError!EntityId {
             const id = try self.allocEntity();
             self.entity_set.set(id.index);
             inline for (entity_fields) |field| {
@@ -50,18 +57,18 @@ pub fn Ecs(E: type) type {
             return id;
         }
 
-        pub fn despawn(self: *ThisEcs, entity: EntityId) !void {
+        pub fn despawn(self: *ThisEcs, entity: EntityId) DespawnError!void {
             if (entity.index >= self.generations.items.len or entity.generation != self.generations.items[entity.index]) return;
             try self.entity_pool.append(self.allocator, entity.index);
             self.entity_set.unset(entity.index);
             self.generations.items[entity.index] += 1;
         }
 
-        pub fn query(self: *ThisEcs, Query: type) !QueryIterator(Query) {
+        pub fn query(self: *ThisEcs, Query: type) QueryError!QueryIterator(Query) {
             return try QueryIterator(Query).init(self);
         }
 
-        fn allocEntity(self: *ThisEcs) !EntityId {
+        fn allocEntity(self: *ThisEcs) std.mem.Allocator.Error!EntityId {
             if (self.entity_pool.pop()) |index| {
                 return .{
                     .generation = self.generations.items[index],
@@ -95,7 +102,7 @@ pub fn Ecs(E: type) type {
                 generations: []const u8,
                 iter: std.DynamicBitSet.Iterator(.{}),
 
-                pub fn init(ecs: *ThisEcs) !ThisQueryIterator {
+                pub fn init(ecs: *ThisEcs) QueryError!ThisQueryIterator {
                     var entities: std.DynamicBitSetUnmanaged = try ecs.entity_set.clone(ecs.allocator);
                     inline for (query_fields) |q| {
                         const e = getField(q.name, entity_fields);

@@ -5,19 +5,18 @@ const Type = std.builtin.Type;
 const EntityId = @import("entity_id.zig").EntityId;
 
 pub fn Ecs(E: type) type {
-    const entity_fields = switch (@typeInfo(E)) {
-        .@"struct" => |s| s,
-        else => @compileError("Entity must be a struct"),
-    }.fields;
-
     return struct {
         pub const Entity = E;
+        pub const entity_fields = switch (@typeInfo(E)) {
+            .@"struct" => |s| s,
+            else => @compileError("Entity must be a struct"),
+        }.fields;
 
         // Error types
         pub const DespawnError = std.mem.Allocator.Error;
         pub const SpawnError = std.mem.Allocator.Error;
         pub const QueryError = std.mem.Allocator.Error;
-        pub const Error = DespawnError | SpawnError | QueryError;
+        pub const Error = DespawnError || SpawnError || QueryError;
 
         const ThisEcs = @This();
 
@@ -88,43 +87,53 @@ pub fn Ecs(E: type) type {
         }
 
         pub fn QueryIterator(Query: type) type {
-            const query_fields = switch (@typeInfo(Query)) {
-                .@"struct" => |s| s.fields,
-                else => @compileError("Query must be a struct"),
-            };
-
             return struct {
                 const ThisQueryIterator = @This();
 
+                pub const query_fields = switch (@typeInfo(Query)) {
+                    .@"struct" => |s| s.fields,
+                    else => @compileError("Query must be a struct"),
+                };
+
+                allocator: std.mem.Allocator,
                 current_entity_id: EntityId = undefined,
                 components: *Components(entity_fields),
-                entities: std.DynamicBitSet,
+                entities: std.DynamicBitSetUnmanaged,
+                ecs_generations: []const u8,
                 generations: []const u8,
                 iter: std.DynamicBitSet.Iterator(.{}),
 
                 pub fn init(ecs: *ThisEcs) QueryError!ThisQueryIterator {
-                    var entities: std.DynamicBitSetUnmanaged = try ecs.entity_set.clone(ecs.allocator);
+                    const allocator = ecs.allocator;
+                    const generations = try allocator.alloc(u8, ecs.generations.items.len);
+                    @memcpy(generations, ecs.generations.items);
+
+                    var entities: std.DynamicBitSetUnmanaged = try ecs.entity_set.clone(allocator);
                     inline for (query_fields) |q| {
                         const e = getField(q.name, entity_fields);
                         if (isOptional(e.type) and !isOptional(q.type)) {
-                            try @field(ecs.components, q.name).intersectWith(ecs.allocator, &entities);
+                            try @field(ecs.components, q.name).intersectWith(allocator, &entities);
                         }
                     }
 
                     return .{
+                        .allocator = allocator,
                         .components = &ecs.components,
-                        .entities = .{ .allocator = ecs.allocator, .unmanaged = entities },
-                        .generations = ecs.generations.items,
+                        .entities = entities,
+                        .ecs_generations = ecs.generations.items,
+                        .generations = generations,
                         .iter = entities.iterator(.{}),
                     };
                 }
 
                 pub fn deinit(self: *ThisQueryIterator) void {
-                    self.entities.deinit();
+                    self.entities.deinit(self.allocator);
+                    self.allocator.free(self.generations);
                 }
 
                 pub fn next(self: *ThisQueryIterator) ?Query {
                     outer: while (self.iter.next()) |index| {
+                        if (self.generations[index] != self.ecs_generations[index]) continue; // Make sure the entity hasn't despawned
                         self.current_entity_id = .{ .generation = self.generations[index], .index = @intCast(index) };
 
                         var result: Query = undefined;

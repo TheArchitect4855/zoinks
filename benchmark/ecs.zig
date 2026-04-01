@@ -1,8 +1,8 @@
 const std = @import("std");
 const zoinks = @import("zoinks");
-const root = @import("root.zig");
+const common = @import("common.zig");
 
-const Ecs = zoinks.Ecs(root.Entity);
+const Ecs = zoinks.Ecs(common.Entity);
 const Self = @This();
 
 pub fn bench(
@@ -12,36 +12,36 @@ pub fn bench(
     query_iter_count: u64,
     stdout: *std.Io.Writer,
 ) !void {
-    const pregenerated_entities = try root.getEntities(allocator, rng, spawn_iter_count);
+    const pregenerated_entities = try common.getEntities(allocator, rng, spawn_iter_count);
     defer allocator.free(pregenerated_entities);
 
-    const despawn_indices = try root.getDespawnIndices(allocator, rng, spawn_iter_count / 2, spawn_iter_count);
+    const despawn_indices = try common.getDespawnIndices(allocator, rng, spawn_iter_count / 2, spawn_iter_count);
     defer allocator.free(despawn_indices);
 
     var ecs = Ecs.init(allocator);
     defer ecs.deinit();
 
-    try root.bench(Self, "benchSpawn", .{ .ecs = &ecs, .entities = pregenerated_entities }, spawn_iter_count, stdout);
-    try root.bench(Self, "benchQueryEmpty", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchQueryFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchQueryName", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchCounter", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchSum", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchSearchFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchSearchRandomValue", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchDespawn", .{ .ecs = &ecs }, spawn_iter_count, stdout);
+    try common.bench(Self, "benchSpawn", .{ .ecs = &ecs, .entities = pregenerated_entities }, spawn_iter_count, stdout);
+    try common.bench(Self, "benchQueryEmpty", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchQueryFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchQueryName", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchCounter", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchSum", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchSearchFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchSearchRandomValue", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchDespawn", .{ .ecs = &ecs }, spawn_iter_count, stdout);
 
-    try root.bench(Self, "benchSpawn", .{ .ecs = &ecs, .entities = pregenerated_entities }, spawn_iter_count, stdout);
-    try root.bench(Self, "benchDespawnRandom", .{ .ecs = &ecs, .indices = despawn_indices }, despawn_indices.len, stdout);
-    try root.bench(Self, "benchQueryEmpty", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchQueryFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchQueryName", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchCounter", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchSum", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchSearchFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
-    try root.bench(Self, "benchSearchRandomValue", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchSpawn", .{ .ecs = &ecs, .entities = pregenerated_entities }, spawn_iter_count, stdout);
+    try common.bench(Self, "benchDespawnRandom", .{ .ecs = &ecs, .indices = despawn_indices }, despawn_indices.len, stdout);
+    try common.bench(Self, "benchQueryEmpty", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchQueryFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchQueryName", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchCounter", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchSum", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchSearchFlag", .{ .ecs = &ecs }, query_iter_count, stdout);
+    try common.bench(Self, "benchSearchRandomValue", .{ .ecs = &ecs }, query_iter_count, stdout);
 }
 
 pub inline fn benchFlag(args: anytype, _: usize) !usize {

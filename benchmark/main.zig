@@ -1,6 +1,7 @@
 const std = @import("std");
 const zoinks = @import("zoinks");
 const ecs = @import("ecs.zig");
+const concurrent = @import("concurrent.zig");
 
 const Self = @This();
 const page_allocator = std.heap.page_allocator;
@@ -24,6 +25,7 @@ pub fn main() !void {
     var rng = std.Random.DefaultPrng.init(@intCast(std.time.microTimestamp()));
     try stdout.print("function\tinvocation count\telapsed time\tavg. per invocation\thash\n", .{});
     try ecs.bench(gpa.allocator(), rng.random(), spawn_iter_count, query_iter_count, stdout);
+    try concurrent.bench(gpa.allocator(), rng.random(), spawn_iter_count, stdout);
     try stdout.flush();
 }
 

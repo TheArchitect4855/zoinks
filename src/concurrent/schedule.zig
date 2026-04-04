@@ -3,6 +3,8 @@ const sync = @import("../ecs.zig");
 const task = @import("task.zig");
 const StructField = std.builtin.Type.StructField;
 
+/// A schedule is a collection of queries to be run in parallel. `E` is the
+/// entity type, and `T` is the context type.
 pub fn Schedule(E: type, T: type) type {
     const Ecs = sync.Ecs(E);
     const Task = task.Task(E);
@@ -17,6 +19,7 @@ pub fn Schedule(E: type, T: type) type {
             self.tasks.deinit(self.allocator);
         }
 
+        /// Adds a query to be run in parallel. `Q` is the query type.
         pub fn addQuery(
             self: *Self,
             Q: type,

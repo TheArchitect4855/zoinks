@@ -1,3 +1,5 @@
+//! A wrapper around `std.Thread` to be used with a concurrent ECS.
+
 const std = @import("std");
 
 thread: std.Thread,

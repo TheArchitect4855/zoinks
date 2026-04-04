@@ -8,6 +8,8 @@ const Task = @import("task.zig").Task;
 
 pub const StdThread = @import("StdThread.zig");
 
+/// A thread-safe, concurrent wrapper around the normal ECS. Additionally takes
+/// a `Thread` type used to spawn worker threads.
 pub fn Ecs(E: type, Thread: type) type {
     const TaskNode = struct {
         pub const State = enum { waiting, running, completed };
@@ -16,7 +18,7 @@ pub fn Ecs(E: type, Thread: type) type {
     };
 
     const SyncEcs = sync.Ecs(E);
-    const SharedImpl = struct {
+    const Shared = struct {
         const Self = @This();
 
         ecs: SyncEcs,
@@ -90,11 +92,15 @@ pub fn Ecs(E: type, Thread: type) type {
 
         pub const Entity = SyncEcs.Entity;
         pub const QueryIterator = SyncEcs.QueryIterator;
-        pub const Shared = SharedImpl;
         gpa: std.mem.Allocator,
         shared: *Shared,
         workers: []const Thread,
 
+        /// Tries to initialize a new concurrent ECS and spawn worker threads
+        /// for it. `worker_count` is the total number of workers, and must be
+        /// greater than zero.
+        ///
+        /// This function is NOT thread safe.
         pub fn init(
             gpa: *std.heap.ThreadSafeAllocator,
             worker_count: usize,
@@ -124,6 +130,10 @@ pub fn Ecs(E: type, Thread: type) type {
             };
         }
 
+        /// Stops all of the associated worker threads and frees any associated
+        /// memory. After this is called, the ECS is no longer valid.
+        ///
+        /// This method is NOT thread safe.
         pub fn deinit(self: Self) void {
             stop(self.shared, self.workers);
             self.shared.ecs.deinit();
@@ -131,6 +141,11 @@ pub fn Ecs(E: type, Thread: type) type {
             self.gpa.free(self.workers);
         }
 
+        /// Creates a new `Schedule` that can be used to run queries
+        /// concurrently. `T` is the context type for the schedule.
+        ///
+        /// This method is thread safe, however it is recommended to create all
+        /// schedules in advance on the main thread.
         pub fn createSchedule(
             self: *Self,
             T: type,
@@ -138,6 +153,11 @@ pub fn Ecs(E: type, Thread: type) type {
             return .{ .allocator = self.gpa };
         }
 
+        /// Tries to execute this schedule across all workers. `ctx` is the
+        /// context that will be passed to the scheduled queries.
+        ///
+        /// This method is NOT thread safe, and should only be called from the
+        /// main thread.
         pub fn runSchedule(
             self: *Self,
             T: type,
@@ -193,23 +213,37 @@ pub fn Ecs(E: type, Thread: type) type {
             self.shared.task_list_mutex.unlock();
         }
 
-        pub fn spawn(self: Self, entities: []const Entity, id_buffer: []EntityId) SyncEcs.SpawnError!void {
-            std.debug.assert(id_buffer.len == 0 or entities.len == id_buffer.len);
+        /// Tries to spawn a batch of entities and write their IDs to
+        /// `id_buffer`. If `id_buffer` is not null, its length must be the same
+        /// as `entities`.
+        ///
+        /// This method is thread safe.
+        pub fn spawn(
+            self: Self,
+            entities: []const Entity,
+            id_buffer: ?[]EntityId,
+        ) SyncEcs.SpawnError!void {
+            if (id_buffer) |buffer| {
+                std.debug.assert(buffer.len == entities.len);
+            }
 
             self.shared.ecs_rw.lock();
             defer self.shared.ecs_rw.unlock();
 
             const ecs = &self.shared.ecs;
-            if (id_buffer.len == 0) {
-                for (entities) |e| _ = try ecs.spawn(e);
-            } else {
+            if (id_buffer) |b| {
                 for (entities, 0..) |e, i| {
                     const id = try ecs.spawn(e);
-                    id_buffer[i] = id;
+                    b[i] = id;
                 }
+            } else {
+                for (entities) |e| _ = try ecs.spawn(e);
             }
         }
 
+        /// Tries to despawn a batch of entities.
+        ///
+        /// This method is thread safe.
         pub fn despawn(self: Self, entity_ids: []const EntityId) SyncEcs.DespawnError!void {
             self.shared.ecs_rw.lock();
             defer self.shared.ecs_rw.unlock();

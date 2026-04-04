@@ -4,9 +4,16 @@ const Type = std.builtin.Type;
 
 const EntityId = @import("entity_id.zig").EntityId;
 
+/// The core ECS type. `E` is a struct that represents your entity.
+///
+/// Generally, you should not access any of the fields on the ECS, and only use
+/// the public methods.
 pub fn Ecs(E: type) type {
     return struct {
+        /// The entity struct you passed to the ECS function.
         pub const Entity = E;
+
+        /// Field info for the entity struct.
         pub const entity_fields = switch (@typeInfo(E)) {
             .@"struct" => |s| s,
             else => @compileError("Entity must be a struct"),
@@ -26,6 +33,7 @@ pub fn Ecs(E: type) type {
         entity_set: std.DynamicBitSetUnmanaged = .{},
         generations: std.ArrayListUnmanaged(u8) = .empty,
 
+        /// Initializes a new ECS instance.
         pub fn init(gpa: std.mem.Allocator) ThisEcs {
             var components: Components(entity_fields) = undefined;
             inline for (entity_fields) |field| {
@@ -35,6 +43,7 @@ pub fn Ecs(E: type) type {
             return .{ .allocator = gpa, .components = components };
         }
 
+        /// Deinitializes this ECS. Once called, it can no longer be used.
         pub fn deinit(self: *ThisEcs) void {
             inline for (entity_fields) |field| {
                 @field(self.components, field.name).deinit(self.allocator);
@@ -45,6 +54,7 @@ pub fn Ecs(E: type) type {
             self.generations.deinit(self.allocator);
         }
 
+        /// Tries to spawn a new entity and return its ID.
         pub fn spawn(self: *ThisEcs, entity: Entity) SpawnError!EntityId {
             const id = try self.allocEntity();
             self.entity_set.set(id.index);
@@ -56,6 +66,8 @@ pub fn Ecs(E: type) type {
             return id;
         }
 
+        /// Tries to despawn the specified entity. If successful, the passed
+        /// entity ID is no longer valid.
         pub fn despawn(self: *ThisEcs, entity: EntityId) DespawnError!void {
             if (entity.index >= self.generations.items.len or entity.generation != self.generations.items[entity.index]) return;
             try self.entity_pool.append(self.allocator, entity.index);
@@ -63,6 +75,21 @@ pub fn Ecs(E: type) type {
             self.generations.items[entity.index] += 1;
         }
 
+        /// Tries to run the specified query on this ECS and return its
+        /// iterator.
+        ///
+        /// `Query` must be a struct. The field names of the struct must match
+        /// fields on the `Entity` type. The types of those fields must be an
+        /// optional of, a pointer to, or an optional pointer to the type on the
+        /// entity struct. (i.e., if `foo: u32` is a field on the `Entity`
+        /// struct, a query field for `foo` may be one of `foo: u32`,
+        /// `foo: ?u32`, `foo: *u32`, `foo: ?*u32`, `foo: *const u32`, or
+        /// `foo: ?*const u32`)
+        ///
+        /// A query field may have a default value. If a query field has a
+        /// default value, it will filter the results returned from this
+        /// iterator to only entities where that field is equal to the query
+        /// field's default value. (using the `==` operator)
         pub fn query(self: *ThisEcs, Query: type) QueryError!QueryIterator(Query) {
             return try QueryIterator(Query).init(self);
         }
@@ -86,23 +113,32 @@ pub fn Ecs(E: type) type {
             return .{ .generation = 0, .index = @intCast(index) };
         }
 
+        /// An iterator over a query. Generally should not be used directly; use
+        /// `Ecs.query` instead.
         pub fn QueryIterator(Query: type) type {
             return struct {
                 const ThisQueryIterator = @This();
 
+                /// Field info for the query struct.
                 pub const query_fields = switch (@typeInfo(Query)) {
                     .@"struct" => |s| s.fields,
                     else => @compileError("Query must be a struct"),
                 };
 
-                allocator: std.mem.Allocator,
+                /// The entity ID of the last result returned from `next`. This
+                /// is undefined before `next` has been called for the first
+                /// time and after `next` returns `null`.
                 current_entity_id: EntityId = undefined,
+
+                allocator: std.mem.Allocator,
                 components: *Components(entity_fields),
                 entities: std.DynamicBitSetUnmanaged,
                 ecs_generations: []const u8,
                 generations: []const u8,
                 iter: std.DynamicBitSet.Iterator(.{}),
 
+                /// Tries to initialize a query iterator. This generally should
+                /// not be used directly; use `Ecs.query` instead.
                 pub fn init(ecs: *ThisEcs) QueryError!ThisQueryIterator {
                     const allocator = ecs.allocator;
                     const generations = try allocator.alloc(u8, ecs.generations.items.len);
@@ -126,11 +162,18 @@ pub fn Ecs(E: type) type {
                     };
                 }
 
+                /// Deinitializes this query iterator. After this method is
+                /// called, this iterator is no longer valid.
                 pub fn deinit(self: *ThisQueryIterator) void {
                     self.entities.deinit(self.allocator);
                     self.allocator.free(self.generations);
                 }
 
+                /// Returns the next result from this iterator, or `null` when
+                /// the iterator is empty.
+                ///
+                /// Use `current_entity_id` to get the ID of the current entity
+                /// after calling this function.
                 pub fn next(self: *ThisQueryIterator) ?Query {
                     outer: while (self.iter.next()) |index| {
                         if (self.generations[index] != self.ecs_generations[index]) continue; // Make sure the entity hasn't despawned

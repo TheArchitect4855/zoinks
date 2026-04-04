@@ -2,7 +2,7 @@ const std = @import("std");
 const zoinks = @import("zoinks");
 const common = @import("common.zig");
 
-const Ecs = zoinks.ConcurrentEcs(common.Entity);
+const Ecs = zoinks.concurrent.Ecs(common.Entity, zoinks.concurrent.StdThread);
 const Self = @This();
 
 const FlagQuery = struct { flag: bool };
@@ -26,7 +26,7 @@ pub fn bench(
     std.debug.print("using {d} workers\n", .{worker_count});
 
     var thread_safe = std.heap.ThreadSafeAllocator{ .child_allocator = allocator };
-    var ecs = try Ecs.init(&thread_safe, &spawnWorker, 2);
+    var ecs = try Ecs.init(&thread_safe, 2);
     defer ecs.deinit();
 
     try common.bench(Self, "benchSpawn", .{ .ecs = &ecs, .entities = pregenerated_entities }, spawn_iter_count, stdout);
@@ -142,28 +142,4 @@ fn querySearchRandomValue(ecs: *const Ecs, iter: *Ecs.QueryIterator(SearchRandom
     }
 
     std.debug.print("concurrent random count: {d}\n", .{count});
-}
-
-fn spawnWorker(allocator: std.mem.Allocator, worker: Ecs.WorkerFn, shared: *Ecs.Shared) anyerror!Ecs.Worker {
-    const Closure = struct {
-        thread: std.Thread,
-
-        pub fn deinit(self: *@This(), a: std.mem.Allocator) void {
-            a.destroy(self);
-        }
-
-        pub fn join(self: *@This()) void {
-            self.thread.join();
-        }
-
-        fn run(fn_ptr: Ecs.WorkerFn, s: *Ecs.Shared) void {
-            fn_ptr(s);
-        }
-    };
-
-    const closure = try allocator.create(Closure);
-    errdefer allocator.destroy(closure);
-
-    closure.*.thread = try std.Thread.spawn(.{}, Closure.run, .{ worker, shared });
-    return Ecs.Worker.from(Closure, closure);
 }

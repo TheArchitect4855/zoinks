@@ -6,7 +6,9 @@ const Futex = std.Thread.Futex;
 const Schedule = @import("schedule.zig").Schedule;
 const Task = @import("task.zig").Task;
 
-pub fn ConcurrentEcs(E: type) type {
+pub const StdThread = @import("StdThread.zig");
+
+pub fn Ecs(E: type, Thread: type) type {
     const TaskNode = struct {
         pub const State = enum { waiting, running, completed };
         state: State = .waiting,
@@ -88,16 +90,13 @@ pub fn ConcurrentEcs(E: type) type {
 
         pub const Entity = SyncEcs.Entity;
         pub const QueryIterator = SyncEcs.QueryIterator;
-        pub const Worker = @import("Worker.zig");
-        pub const WorkerFn = *const fn (*Shared) void;
         pub const Shared = SharedImpl;
         gpa: std.mem.Allocator,
         shared: *Shared,
-        workers: []Worker,
+        workers: []const Thread,
 
         pub fn init(
             gpa: *std.heap.ThreadSafeAllocator,
-            spawn_fn: *const fn (std.mem.Allocator, WorkerFn, *Shared) anyerror!Worker,
             worker_count: usize,
         ) InitError!Self {
             std.debug.assert(worker_count > 0);
@@ -108,12 +107,12 @@ pub fn ConcurrentEcs(E: type) type {
             errdefer allocator.destroy(shared);
             shared.* = .{ .ecs = sync_ecs };
 
-            const workers = try allocator.alloc(Worker, worker_count - 1);
+            const workers = try allocator.alloc(Thread, worker_count - 1);
             errdefer allocator.free(workers);
             for (0..worker_count - 1) |i| {
-                workers[i] = spawn_fn(allocator, worker, shared) catch |e| {
+                workers[i] = Thread.spawn(worker, .{shared}) catch |e| {
                     std.debug.print("failed to spawn worker: {s}\n", .{@errorName(e)});
-                    stop(allocator, shared, workers[0..i]);
+                    stop(shared, workers[0..i]);
                     return InitError.SpawnWorker;
                 };
             }
@@ -126,7 +125,7 @@ pub fn ConcurrentEcs(E: type) type {
         }
 
         pub fn deinit(self: Self) void {
-            stop(self.gpa, self.shared, self.workers);
+            stop(self.shared, self.workers);
             self.shared.ecs.deinit();
             self.gpa.destroy(self.shared);
             self.gpa.free(self.workers);
@@ -219,12 +218,11 @@ pub fn ConcurrentEcs(E: type) type {
             for (entity_ids) |id| try ecs.despawn(id);
         }
 
-        fn stop(allocator: std.mem.Allocator, shared: *Shared, workers: []Worker) void {
+        fn stop(shared: *Shared, workers: []const Thread) void {
             shared.stop_state.store(1, .release);
             shared.signalWorkerContinue();
-            for (workers) |*w| {
+            for (workers) |w| {
                 w.join();
-                w.deinit(allocator);
             }
         }
 

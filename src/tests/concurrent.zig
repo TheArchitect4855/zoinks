@@ -1,11 +1,12 @@
 const std = @import("std");
+const zoinks = @import("zoinks");
 const Entity = @import("Entity.zig");
 const assert = std.debug.assert;
 
 var debug = std.heap.DebugAllocator(.{}).init;
 var allocator = std.heap.ThreadSafeAllocator{ .child_allocator = debug.allocator() };
 
-const Ecs = @import("zoinks").ConcurrentEcs(Entity);
+const Ecs = zoinks.concurrent.Ecs(Entity, zoinks.concurrent.StdThread);
 
 const EmptyQuery = struct {};
 const NumQuery = struct { num: u32 };
@@ -16,7 +17,7 @@ test "init/deinit" {
     defer assert(debug_allocator.deinit() == .ok);
 
     var gpa = std.heap.ThreadSafeAllocator{ .child_allocator = debug_allocator.allocator() };
-    var ecs = try Ecs.init(&gpa, &spawnWorker, 1);
+    var ecs = try Ecs.init(&gpa, 2);
     defer ecs.deinit();
 }
 
@@ -59,7 +60,7 @@ test "run schedule" {
 }
 
 fn getEcs() Ecs {
-    return Ecs.init(&allocator, &spawnWorker, 1) catch unreachable;
+    return Ecs.init(&allocator, 2) catch unreachable;
 }
 
 fn getEcsForQuery(entity_count: comptime_int) Ecs {
@@ -78,13 +79,6 @@ fn getEcsForQuery(entity_count: comptime_int) Ecs {
     // TODO
     _ = entity_count;
     return getEcs();
-}
-
-fn spawnWorker(gpa: std.mem.Allocator, worker: Ecs.WorkerFn, shared: *Ecs.Shared) anyerror!Ecs.Worker {
-    _ = gpa;
-    _ = worker;
-    _ = shared;
-    unreachable;
 }
 
 fn runQueryVoidEmpty(ctx: *const void, iter: *Ecs.QueryIterator(EmptyQuery)) anyerror!void {

@@ -64,21 +64,21 @@ fn getEcs() Ecs {
 }
 
 fn getEcsForQuery(entity_count: comptime_int) Ecs {
-    // var ecs = getEcs();
-    // for (0..entity_count) |i| {
-    //     _ = ecs.spawn(.{
-    //         .num = @intCast(i),
-    //         .opt_num = if (i % 2 == 0) null else @intCast(i),
-    //         .opt_ptr = if (i % 3 == 0) null else &Entity.ptr_dest,
-    //         .opt_slice = if (i % 5 == 0) null else "Hello, world!",
-    //         .flag = (i % 6 == 0),
-    //     }) catch unreachable;
-    // }
+    var entities: [entity_count]Entity = undefined;
+    for (0..entity_count) |i| {
+        entities[i] = .{
+            .num = @intCast(i),
+            .opt_num = if (i % 2 == 0) null else @intCast(i),
+            .opt_ptr = if (i % 3 == 0) null else &Entity.ptr_dest,
+            .opt_slice = if (i % 5 == 0) null else "Hello, world!",
+            .flag = (i % 6 == 0),
+        };
+    }
 
-    // return ecs;
-    // TODO
-    _ = entity_count;
-    return getEcs();
+    var id_buffer: [entity_count]zoinks.EntityId = undefined;
+    var ecs = getEcs();
+    ecs.spawn(&entities, &id_buffer) catch unreachable;
+    return ecs;
 }
 
 fn runQueryVoidEmpty(ctx: *const void, iter: *Ecs.QueryIterator(EmptyQuery)) anyerror!void {

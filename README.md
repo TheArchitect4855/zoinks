@@ -99,6 +99,9 @@ while (query.next()) |entity| {
 }
 ```
 
+We also have support for a **concurrent** ECS model! Check out the
+`zoinks.concurrent` module for details.
+
 ## Support
 Found a bug? Have a feature request? Submit an issue or create a PR!
 

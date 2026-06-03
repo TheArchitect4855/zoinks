@@ -204,25 +204,15 @@ pub fn Ecs(E: type) type {
 }
 
 fn Components(entity_fields: []const Type.StructField) type {
-    var component_fields: [entity_fields.len]Type.StructField = undefined;
+    var field_names: [entity_fields.len][]const u8 = undefined;
+    var field_types: [entity_fields.len]type = undefined;
     inline for (entity_fields, 0..) |field, i| {
-        const Storage = component_storage.ComponentStorage(field.type);
-        component_fields[i] = .{
-            .name = field.name,
-            .type = Storage,
-            .default_value_ptr = null,
-            .is_comptime = false,
-            .alignment = @alignOf(Storage),
-        };
+        field_names[i] = field.name;
+        field_types[i] = component_storage.ComponentStorage(field.type);
     }
 
-    return @Type(.{ .@"struct" = .{
-        .layout = .auto,
-        .backing_integer = null,
-        .fields = &component_fields,
-        .decls = &.{},
-        .is_tuple = false,
-    } });
+    const field_attrs = [1]std.builtin.Type.StructField.Attributes{.{}} ** entity_fields.len;
+    return @Struct(.auto, null, &field_names, &field_types, &field_attrs);
 }
 
 fn convertComponentToQueryType(Target: type, Source: type, value: ?*Source) Target {

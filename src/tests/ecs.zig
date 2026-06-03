@@ -1,5 +1,5 @@
 const std = @import("std");
-const Entity = @import("entity.zig");
+const Entity = @import("Entity.zig");
 const assert = std.debug.assert;
 const Allocator = std.heap.DebugAllocator(.{});
 

@@ -169,6 +169,17 @@ pub fn Ecs(E: type) type {
                     self.allocator.free(self.generations);
                 }
 
+                /// Consumes this iterator and returns the items as a slice. The
+                /// caller owns the returned slice and must free it.
+                pub fn collect(
+                    self: *ThisQueryIterator,
+                    allocator: std.mem.Allocator,
+                ) std.mem.Allocator.Error![]Query {
+                    var entities = std.ArrayList(Query).empty; // TODO: Pre-allocating might be faster
+                    while (self.next()) |entity| try entities.append(allocator, entity);
+                    return try entities.toOwnedSlice(allocator);
+                }
+
                 /// Returns the next result from this iterator, or `null` when
                 /// the iterator is empty.
                 ///
